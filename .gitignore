@@ -1,0 +1,2 @@
+# Sensor readings are generated at runtime, not part of the source
+data/latest.json
