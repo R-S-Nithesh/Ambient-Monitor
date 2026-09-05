@@ -20,6 +20,8 @@ dashboard: three big gauges (room temperature, humidity, air quality), each with
 own live trend graph, each one flagging red the moment a reading drifts outside its
 comfort range. No database, no framework — a single HTML file on the front end and a
 two-endpoint file-backed API on the back.
+![Uploading banner.png…]()
+
 
 ## ✨ Features
 
