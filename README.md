@@ -36,7 +36,8 @@ two-endpoint file-backed API on the back.
 ## 🖥️ Preview
 
 <div align="center">
-<em>Add a screenshot or screen recording of the dashboard here.</em>
+<em><img width="1920" height="1080" alt="Screenshot (526)" src="https://github.com/user-attachments/assets/6bdc9ed0-68ec-45f8-b74e-c0c2cd1e6c53" />
+</em>
 </div>
 
 ## 🏗️ Architecture
