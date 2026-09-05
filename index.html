@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ambient Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0e131a;
+    --panel: #141b24;
+    --border: #263140;
+    --border-soft: #1c2531;
+    --text: #eef2f6;
+    --text-dim: #7c8898;
+    --text-faint: #4c5a6a;
+    --amber: #e8a33d;
+    --amber-dim: #6b5327;
+    --cyan: #4fc3d9;
+    --cyan-dim: #274d59;
+    --blue-deep: #2f6fb0;
+    --live: #57c785;
+    --green: #6ec97a;
+    --danger: #e5484d;
+    --danger-glow: rgba(229, 72, 77, 0.38);
+    --radius: 3px;
+  }
+
+  *{ box-sizing: border-box; }
+
+  html, body{
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', -apple-system, sans-serif;
+    min-height: 100vh;
+  }
+
+  body{
+    background-image:
+      linear-gradient(var(--border-soft) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border-soft) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: center;
+    background-attachment: fixed;
+  }
+
+  body::before{
+    content: "";
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(ellipse at center, transparent 0%, var(--bg) 78%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .frame{
+    position: relative;
+    z-index: 1;
+    max-width: 1480px;
+    margin: 0 auto;
+    padding: 40px 24px 56px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+  }
+
+  /* header */
+  header{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 16px;
+    padding-bottom: 28px;
+    margin-bottom: 32px;
+    border-bottom: 1px solid var(--border);
+    flex-wrap: wrap;
+  }
+
+  .title-block h1{
+    font-size: 1.3rem;
+    font-weight: 600;
+    margin: 0 0 4px;
+    letter-spacing: -0.01em;
+  }
+
+  .title-block p{
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--text-dim);
+  }
+
+  .status{
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
+
+  .status-dot{
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--text-faint);
+    position: relative;
+    flex-shrink: 0;
+  }
+
+  .status-dot.live{ background: var(--live); }
+
+  .status-dot.live::after{
+    content: "";
+    position: absolute;
+    inset: -5px;
+    border-radius: 50%;
+    border: 1px solid var(--live);
+    animation: pulse-ring 2.4s ease-out infinite;
+  }
+
+  @keyframes pulse-ring{
+    0%{ transform: scale(0.6); opacity: 0.9; }
+    100%{ transform: scale(2.1); opacity: 0; }
+  }
+
+  /* ---- channels: gauge + own graph, side by side ---- */
+  main.gauges{
+    display: grid;
+    grid-template-columns: 1fr 1px 1fr 1px 1fr;
+    gap: 0;
+    flex: 1;
+    align-items: start;
+  }
+
+  .seam{
+    background: var(--border);
+    margin: 4px 0;
+  }
+
+  .channel{
+    padding: 4px 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    border-radius: 8px;
+    position: relative;
+  }
+
+  .channel.temp{ background: radial-gradient(circle at 50% 0%, rgba(232, 163, 61, 0.06), transparent 62%); }
+  .channel.humidity{ background: radial-gradient(circle at 50% 0%, rgba(79, 195, 217, 0.06), transparent 62%); }
+  .channel.air{ background: radial-gradient(circle at 50% 0%, rgba(110, 201, 122, 0.06), transparent 62%); }
+
+  .channel-header{
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    max-width: 380px;
+    margin-bottom: 6px;
+  }
+
+  .channel-icon{
+    width: 26px;
+    height: 26px;
+    flex-shrink: 0;
+    color: var(--amber);
+    transition: color 0.4s ease;
+  }
+  .channel.humidity .channel-icon{ color: var(--cyan); }
+  .channel.air .channel-icon{ color: var(--green); }
+  .channel.alert .channel-icon{ color: var(--danger); }
+
+  .channel-title{
+    text-align: left;
+    flex: 1;
+  }
+
+  .channel-title .metric-label{
+    font-size: 0.95rem;
+    color: var(--text-dim);
+    font-weight: 500;
+  }
+
+  .channel-title .metric-range{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    color: var(--text-faint);
+    margin-top: 1px;
+  }
+
+  .alert-badge{
+    display: none;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px 3px 8px;
+    border-radius: 20px;
+    background: rgba(229, 72, 77, 0.14);
+    border: 1px solid var(--danger);
+    color: var(--danger);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .alert-badge svg{ width: 9px; height: 9px; fill: var(--danger); }
+  .channel.alert .alert-badge{ display: inline-flex; }
+
+  /* big gauge */
+  .gauge-svg-wrap{
+    position: relative;
+    width: 100%;
+    max-width: 320px;
+    margin-top: 6px;
+  }
+
+  .gauge-svg-wrap::before{
+    content: "";
+    position: absolute;
+    inset: -10%;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--danger-glow), transparent 68%);
+    opacity: 0;
+    transform: scale(0.9);
+    transition: opacity 0.4s ease;
+    z-index: -1;
+    pointer-events: none;
+  }
+
+  .gauge-svg-wrap.alert::before{
+    opacity: 1;
+    animation: gauge-pulse 1.7s ease-in-out infinite;
+  }
+
+  @keyframes gauge-pulse{
+    0%, 100%{ opacity: 0.5; transform: scale(0.92); }
+    50%{ opacity: 0.95; transform: scale(1.03); }
+  }
+
+  .gauge-svg-wrap svg{ width: 100%; height: auto; display: block; }
+
+  .readout{
+    position: absolute;
+    left: 0; right: 0;
+    top: 58%;
+    transform: translateY(-50%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .readout .value{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: clamp(2.6rem, 6.5vw, 3.8rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    font-variant-numeric: tabular-nums;
+    color: var(--amber);
+    transition: color 0.4s ease;
+  }
+  .channel.humidity .readout .value{ color: var(--cyan); }
+  .channel.air .readout .value{ color: var(--green); }
+  .channel.alert .readout .value{ color: var(--danger); }
+
+  .readout .unit{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 1rem;
+    color: var(--text-dim);
+    margin-top: 4px;
+  }
+
+  .trend{
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--text-dim);
+    margin-top: 8px;
+    height: 16px;
+  }
+
+  .trend svg{ width: 10px; height: 10px; }
+  .trend.up svg{ fill: var(--amber); }
+  .trend.down svg{ fill: var(--cyan); transform: rotate(180deg); }
+  .trend.flat svg{ fill: var(--text-faint); }
+  .channel.humidity .trend.up svg{ fill: var(--cyan); transform: none; }
+  .channel.humidity .trend.down svg{ fill: var(--blue-deep); transform: rotate(180deg); }
+  .channel.air .trend.up svg{ fill: var(--danger); }
+  .channel.air .trend.down svg{ fill: var(--green); transform: rotate(180deg); }
+
+  /* per-channel graph */
+  .graph-wrap{
+    width: 100%;
+    max-width: 400px;
+    margin-top: 22px;
+  }
+
+  .graph-label{
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.66rem;
+    color: var(--text-faint);
+    letter-spacing: 0.02em;
+    text-align: left;
+    margin-bottom: 6px;
+  }
+
+  .graph-wrap svg{ width: 100%; height: auto; display: block; }
+
+  footer{
+    margin-top: 44px;
+    padding-top: 20px;
+    border-top: 1px solid var(--border);
+    font-size: 0.78rem;
+    color: var(--text-faint);
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  @media (max-width: 980px){
+    main.gauges{ grid-template-columns: 1fr; }
+    .seam{ width: auto; height: 1px; margin: 30px 0; }
+    .channel{ padding: 4px 8px; }
+  }
+
+  :focus-visible{
+    outline: 2px solid var(--cyan);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+  <div class="frame">
+
+    <header>
+      <div class="title-block">
+        <h1>Ambient Monitor</h1>
+        <p>Room sensor module — updates every 3s</p>
+      </div>
+      <div class="status">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">connecting…</span>
+      </div>
+    </header>
+
+    <main class="gauges">
+      <section class="channel temp" id="tempChannel" aria-label="Room temperature">
+        <div class="channel-header">
+          <svg class="channel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0Z"/>
+            <path d="M9.5 3.5v9"/>
+          </svg>
+          <div class="channel-title">
+            <div class="metric-label">Room Temperature</div>
+            <div class="metric-range">Comfort 18 – 28 °C</div>
+          </div>
+          <div class="alert-badge" id="tempAlertBadge">
+            <svg viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10"/></svg>
+            <span id="tempAlertText">HIGH</span>
+          </div>
+        </div>
+
+        <div class="gauge-svg-wrap" id="tempGaugeWrap">
+          <svg viewBox="0 0 300 190" id="tempSvg">
+            <defs>
+              <linearGradient id="tempGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="var(--cyan)"/>
+                <stop offset="55%" stop-color="#a9c957"/>
+                <stop offset="100%" stop-color="var(--amber)"/>
+              </linearGradient>
+            </defs>
+            <path id="tempTrack" fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round"/>
+            <path id="tempComfort" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="4" stroke-linecap="round"/>
+            <path id="tempArc" fill="none" stroke="url(#tempGrad)" stroke-width="10" stroke-linecap="round"/>
+            <circle id="tempTickMin" r="2.5" fill="var(--text-faint)"/>
+            <circle id="tempTickMax" r="2.5" fill="var(--text-faint)"/>
+          </svg>
+          <div class="readout">
+            <div class="value" id="tempValue" aria-live="polite">--</div>
+            <div class="unit">°C</div>
+          </div>
+        </div>
+
+        <div class="trend flat" id="tempTrend">
+          <svg viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10"/></svg>
+          <span id="tempTrendText">steady</span>
+        </div>
+
+        <div class="graph-wrap">
+          <div class="graph-label">Trend · last 2 min</div>
+          <svg viewBox="0 0 400 150" id="tempGraphSvg"></svg>
+        </div>
+      </section>
+
+      <div class="seam"></div>
+
+      <section class="channel humidity" id="humChannel" aria-label="Relative humidity">
+        <div class="channel-header">
+          <svg class="channel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2.7 17.3 9.4a7.2 7.2 0 1 1-10.6 0Z"/>
+          </svg>
+          <div class="channel-title">
+            <div class="metric-label">Humidity</div>
+            <div class="metric-range">Comfort 30 – 60 %RH</div>
+          </div>
+          <div class="alert-badge" id="humAlertBadge">
+            <svg viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10"/></svg>
+            <span id="humAlertText">HIGH</span>
+          </div>
+        </div>
+
+        <div class="gauge-svg-wrap" id="humGaugeWrap">
+          <svg viewBox="0 0 300 190" id="humSvg">
+            <defs>
+              <linearGradient id="humGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="#dce9ee"/>
+                <stop offset="55%" stop-color="var(--cyan)"/>
+                <stop offset="100%" stop-color="var(--blue-deep)"/>
+              </linearGradient>
+            </defs>
+            <path id="humTrack" fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round"/>
+            <path id="humComfort" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="4" stroke-linecap="round"/>
+            <path id="humArc" fill="none" stroke="url(#humGrad)" stroke-width="10" stroke-linecap="round"/>
+            <circle id="humTickMin" r="2.5" fill="var(--text-faint)"/>
+            <circle id="humTickMax" r="2.5" fill="var(--text-faint)"/>
+          </svg>
+          <div class="readout">
+            <div class="value" id="humValue" aria-live="polite">--</div>
+            <div class="unit">%RH</div>
+          </div>
+        </div>
+
+        <div class="trend flat" id="humTrend">
+          <svg viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10"/></svg>
+          <span id="humTrendText">steady</span>
+        </div>
+
+        <div class="graph-wrap">
+          <div class="graph-label">Trend · last 2 min</div>
+          <svg viewBox="0 0 400 150" id="humGraphSvg"></svg>
+        </div>
+      </section>
+
+      <div class="seam"></div>
+
+      <section class="channel air" id="airChannel" aria-label="Air quality">
+        <div class="channel-header">
+          <svg class="channel-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 8h11a3 3 0 1 0-3-3"/>
+            <path d="M3 12h15a3 3 0 1 1-3 3"/>
+            <path d="M3 16h8"/>
+          </svg>
+          <div class="channel-title">
+            <div class="metric-label">Air Quality</div>
+            <div class="metric-range">Good 0 – 350 PPM</div>
+          </div>
+          <div class="alert-badge" id="airAlertBadge">
+            <svg viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10"/></svg>
+            <span id="airAlertText">HIGH</span>
+          </div>
+        </div>
+
+        <div class="gauge-svg-wrap" id="airGaugeWrap">
+          <svg viewBox="0 0 300 190" id="airSvg">
+            <defs>
+              <linearGradient id="airGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stop-color="var(--green)"/>
+                <stop offset="55%" stop-color="#e8c93d"/>
+                <stop offset="100%" stop-color="var(--danger)"/>
+              </linearGradient>
+            </defs>
+            <path id="airTrack" fill="none" stroke="var(--border)" stroke-width="10" stroke-linecap="round"/>
+            <path id="airComfort" fill="none" stroke="rgba(255,255,255,0.16)" stroke-width="4" stroke-linecap="round"/>
+            <path id="airArc" fill="none" stroke="url(#airGrad)" stroke-width="10" stroke-linecap="round"/>
+            <circle id="airTickMin" r="2.5" fill="var(--text-faint)"/>
+            <circle id="airTickMax" r="2.5" fill="var(--text-faint)"/>
+          </svg>
+          <div class="readout">
+            <div class="value" id="airValue" aria-live="polite">--</div>
+            <div class="unit">PPM</div>
+          </div>
+        </div>
+
+        <div class="trend flat" id="airTrend">
+          <svg viewBox="0 0 10 10"><polygon points="5,0 10,10 0,10"/></svg>
+          <span id="airTrendText">steady</span>
+        </div>
+
+        <div class="graph-wrap">
+          <div class="graph-label">Trend · last 2 min</div>
+          <svg viewBox="0 0 400 150" id="airGraphSvg"></svg>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <span>Ambient module · ESP32 + DHT11 + MQ135</span>
+      <span id="lastUpdated">no readings yet</span>
+    </footer>
+
+  </div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- gauge geometry: 270° arc, centered ----
+  const CX = 150, CY = 105, R = 85;
+  const START_ANGLE = -225;
+  const SWEEP = 270;
+
+  function toRad(deg){ return (deg * Math.PI) / 180; }
+
+  function pointOnArc(angleDeg){
+    const rad = toRad(angleDeg);
+    return { x: CX + R * Math.cos(rad), y: CY + R * Math.sin(rad) };
+  }
+
+  function describeArc(startDeg, endDeg){
+    const start = pointOnArc(startDeg);
+    const end = pointOnArc(endDeg);
+    const largeArc = Math.abs(endDeg - startDeg) > 180 ? 1 : 0;
+    return "M " + start.x.toFixed(2) + " " + start.y.toFixed(2) + " A " + R + " " + R + " 0 " + largeArc + " 1 " + end.x.toFixed(2) + " " + end.y.toFixed(2);
+  }
+
+  function fracToDeg(frac){ return START_ANGLE + SWEEP * Math.max(0, Math.min(1, frac)); }
+
+  function setupGauge(el, cfg){
+    el.track.setAttribute("d", describeArc(START_ANGLE, START_ANGLE + SWEEP));
+    const p0 = pointOnArc(START_ANGLE);
+    const p1 = pointOnArc(START_ANGLE + SWEEP);
+    el.tickMin.setAttribute("cx", p0.x); el.tickMin.setAttribute("cy", p0.y);
+    el.tickMax.setAttribute("cx", p1.x); el.tickMax.setAttribute("cy", p1.y);
+
+    // comfort-zone overlay: the "safe" band on the dial itself
+    const startDeg = fracToDeg((cfg.normalMin - cfg.min) / (cfg.max - cfg.min));
+    const endDeg = fracToDeg((cfg.normalMax - cfg.min) / (cfg.max - cfg.min));
+    el.comfort.setAttribute("d", describeArc(startDeg, endDeg));
+  }
+
+  function updateArc(el, cfg, value, isAlert){
+    const frac = (value - cfg.min) / (cfg.max - cfg.min);
+    const endDeg = fracToDeg(frac);
+    el.arc.setAttribute("d", frac > 0 ? describeArc(START_ANGLE, endDeg) : "");
+    el.arc.setAttribute("stroke", isAlert ? "var(--danger)" : el.gradUrl);
+  }
+
+  // ---- per-channel controller: gauge + trend + own graph ----
+  function makeChannel(cfg){
+    const el = {
+      channel: document.getElementById(cfg.channelId),
+      wrap: document.getElementById(cfg.wrapId),
+      track: document.getElementById(cfg.trackId),
+      comfort: document.getElementById(cfg.comfortId),
+      arc: document.getElementById(cfg.arcId),
+      tickMin: document.getElementById(cfg.tickMinId),
+      tickMax: document.getElementById(cfg.tickMaxId),
+      value: document.getElementById(cfg.valueId),
+      trend: document.getElementById(cfg.trendId),
+      trendText: document.getElementById(cfg.trendTextId),
+      alertBadge: document.getElementById(cfg.alertBadgeId),
+      alertText: document.getElementById(cfg.alertTextId),
+      graphSvg: document.getElementById(cfg.graphId),
+      gradUrl: "url(#" + cfg.gradId + ")"
+    };
+
+    setupGauge(el, cfg);
+
+    const history = [];
+    let current = null, previous = null, isAlert = false;
+
+    function applyReading(value){
+      previous = current;
+      current = Math.max(cfg.min, Math.min(cfg.max, value));
+      history.push(current);
+      if (history.length > 40) history.shift();
+      render();
+    }
+
+    function render(){
+      if (current === null) return;
+
+      isAlert = current > cfg.normalMax || current < cfg.normalMin;
+      el.channel.classList.toggle("alert", isAlert);
+      el.wrap.classList.toggle("alert", isAlert);
+      el.alertText.textContent = current > cfg.normalMax ? "HIGH" : "LOW";
+
+      updateArc(el, cfg, current, isAlert);
+      el.value.textContent = current.toFixed(cfg.decimals);
+
+      if (previous !== null){
+        const delta = current - previous;
+        el.trend.classList.remove("up", "down", "flat");
+        if (delta > cfg.flatThreshold){
+          el.trend.classList.add("up");
+          el.trendText.textContent = "rising";
+        } else if (delta < -cfg.flatThreshold){
+          el.trend.classList.add("down");
+          el.trendText.textContent = "falling";
+        } else {
+          el.trend.classList.add("flat");
+          el.trendText.textContent = "steady";
+        }
+      }
+
+      drawGraph();
+    }
+
+    function drawGraph(){
+      if (history.length < 2) return;
+
+      const w = 400, h = 150, padL = 32, padR = 12, padT = 10, padB = 10;
+      const innerW = w - padL - padR, innerH = h - padT - padB;
+      const stepX = innerW / (history.length - 1);
+
+      function mapY(v){
+        const f = Math.max(0, Math.min(1, (v - cfg.min) / (cfg.max - cfg.min)));
+        return padT + innerH - f * innerH;
+      }
+
+      const bandY1 = mapY(cfg.normalMax);
+      const bandY2 = mapY(cfg.normalMin);
+
+      const linePath = history.map((v, i) => {
+        const x = padL + i * stepX;
+        const y = mapY(v);
+        return (i === 0 ? "M" : "L") + " " + x.toFixed(1) + " " + y.toFixed(1);
+      }).join(" ");
+
+      const gridLines = [0, 0.5, 1].map(function(f){
+        const y = padT + innerH - f * innerH;
+        const label = (cfg.min + f * (cfg.max - cfg.min)).toFixed(0);
+        return (
+          '<line x1="' + padL + '" y1="' + y.toFixed(1) + '" x2="' + (w - padR) + '" y2="' + y.toFixed(1) + '" stroke="var(--border)" stroke-width="1"></line>' +
+          '<text x="' + (padL - 7) + '" y="' + (y + 3).toFixed(1) + '" text-anchor="end" font-size="8" font-family="JetBrains Mono, monospace" fill="var(--text-faint)">' + label + '</text>'
+        );
+      }).join("");
+
+      const lastX = padL + (history.length - 1) * stepX;
+      const lastY = mapY(history[history.length - 1]);
+      const lineColor = isAlert ? "var(--danger)" : cfg.accent;
+
+      el.graphSvg.innerHTML =
+        '<rect x="' + padL + '" y="' + bandY1.toFixed(1) + '" width="' + innerW + '" height="' + (bandY2 - bandY1).toFixed(1) + '" fill="' + cfg.accent + '" opacity="0.07"></rect>' +
+        gridLines +
+        '<path d="' + linePath + '" fill="none" stroke="' + lineColor + '" stroke-width="1.75" stroke-linejoin="round" stroke-linecap="round"></path>' +
+        '<circle cx="' + lastX.toFixed(1) + '" cy="' + lastY.toFixed(1) + '" r="3" fill="' + lineColor + '"></circle>';
+    }
+
+    return { applyReading };
+  }
+
+  const tempChannel = makeChannel({
+    channelId: "tempChannel", wrapId: "tempGaugeWrap",
+    trackId: "tempTrack", comfortId: "tempComfort", arcId: "tempArc",
+    tickMinId: "tempTickMin", tickMaxId: "tempTickMax",
+    valueId: "tempValue", trendId: "tempTrend", trendTextId: "tempTrendText",
+    alertBadgeId: "tempAlertBadge", alertTextId: "tempAlertText",
+    graphId: "tempGraphSvg", gradId: "tempGrad", accent: "#e8a33d",
+    min: 15, max: 35, normalMin: 18, normalMax: 28,
+    decimals: 1, flatThreshold: 0.05
+  });
+
+  const humChannel = makeChannel({
+    channelId: "humChannel", wrapId: "humGaugeWrap",
+    trackId: "humTrack", comfortId: "humComfort", arcId: "humArc",
+    tickMinId: "humTickMin", tickMaxId: "humTickMax",
+    valueId: "humValue", trendId: "humTrend", trendTextId: "humTrendText",
+    alertBadgeId: "humAlertBadge", alertTextId: "humAlertText",
+    graphId: "humGraphSvg", gradId: "humGrad", accent: "#4fc3d9",
+    min: 0, max: 100, normalMin: 30, normalMax: 60,
+    decimals: 0, flatThreshold: 0.2
+  });
+
+  const airChannel = makeChannel({
+    channelId: "airChannel", wrapId: "airGaugeWrap",
+    trackId: "airTrack", comfortId: "airComfort", arcId: "airArc",
+    tickMinId: "airTickMin", tickMaxId: "airTickMax",
+    valueId: "airValue", trendId: "airTrend", trendTextId: "airTrendText",
+    alertBadgeId: "airAlertBadge", alertTextId: "airAlertText",
+    graphId: "airGraphSvg", gradId: "airGrad", accent: "#6ec97a",
+    min: 0, max: 1000, normalMin: 0, normalMax: 350,
+    decimals: 0, flatThreshold: 3
+  });
+
+  // ---- status + live polling ----
+  const statusDot = document.getElementById("statusDot");
+  const statusText = document.getElementById("statusText");
+  const lastUpdated = document.getElementById("lastUpdated");
+  let hasEverConnected = false;
+
+  function setStatus(state, label){
+    statusDot.classList.remove("live");
+    if (state === "live") statusDot.classList.add("live");
+    statusText.textContent = label;
+  }
+
+  function poll(){
+    fetch("api/latest_reading.php")
+      .then(function(res){ return res.json(); })
+      .then(function(data){
+        if (data.success && data.reading){
+          hasEverConnected = true;
+          tempChannel.applyReading(data.reading.roomTemp);
+          humChannel.applyReading(data.reading.humidity);
+          airChannel.applyReading(data.reading.airQuality !== undefined ? data.reading.airQuality : 0);
+          setStatus("live", "live");
+          lastUpdated.textContent = "updated " + new Date().toLocaleTimeString();
+        } else {
+          setStatus("idle", hasEverConnected ? "sensor offline" : "waiting for sensor…");
+        }
+      })
+      .catch(function(){
+        setStatus("idle", hasEverConnected ? "sensor offline" : "waiting for sensor…");
+      });
+  }
+
+  poll();
+  setInterval(poll, 3000);
+
+})();
+</script>
+</body>
+</html>
